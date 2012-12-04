@@ -4,7 +4,6 @@ module ActiveFedora
       load "tasks/active_fedora.rake"
     end
     generators do
-      puts 'hello'
       require(
         'rails/generators/active_fedora/config/config_generator'
       )
