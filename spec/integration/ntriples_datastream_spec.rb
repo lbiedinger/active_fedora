@@ -32,10 +32,9 @@ describe ActiveFedora::NtriplesRDFDatastream do
     f = RdfTest.find(@subject.pid)
     f.title.should == "John Doe"
     f.title = "Jane Doe"
-    puts f.rdf.content
-    f.save!
-    new = RdfTest.find(@subject.pid)
-    new.title.should == "Jane Doe"
+    f.save
+    new_object = RdfTest.find(@subject.pid)
+    new_object.title.should == "Jane Doe"
 
   end
 
