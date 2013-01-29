@@ -30,4 +30,20 @@ describe "When two or more relationships share the same property" do
     @book.people.should == [@person1, @person2]
     @book.collections.should == []
   end
+
+  it "should not try to update relationships  on objects that are already deleted" do
+    class Item < ActiveFedora::Base
+      has_many :components, :property => :is_part_of
+    end
+    class Component < ActiveFedora::Base
+      belongs_to :item, :property => :is_part_of
+    end
+
+    i = Item.create
+    c = Component.create
+    i.components << c
+    i.save!
+    c.delete
+    i.delete # Causes an update of `c' which results in an error.
+  end
 end
