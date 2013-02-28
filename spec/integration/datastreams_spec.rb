@@ -131,4 +131,45 @@ describe ActiveFedora::Datastreams do
       test_obj.file_ds.dsLabel.should == "Pre-existing DS"
     end
   end
+
+  describe "#create_datastream" do
+    before :each do
+      @base = ActiveFedora::Base.new(:pid=>"test:create_datastream")
+      @base.save
+      @ds_location = ActiveFedora.solr_config[:url] + "/admin/file/?file=schema.xml"
+      open(@ds_location) do |f|
+        @ds_content = f.read
+      end
+    end
+    
+    after :each do
+      @base.delete
+    end
+    # external file datastreams require changes to XACML policies, but http URIs should work
+    it "should create external datastreams" do
+      # we should be albe to reliably download the solr schema
+      ds_opts = {:mimeType=>'text/xml',:controlGroup=>'E',:dsLabel=>'Some metadata',
+                 :dsLocation=>@ds_location}
+      ds = @base.create_datastream('ActiveFedora::Datastream', 'someMetadata', ds_opts)
+      @base.add_datastream(ds)
+      @base.save
+      @base.datastreams.keys.include?('someMetadata').should be_true
+      test_obj = ActiveFedora::Base.find(@base.pid)
+      test_obj.someMetadata.content.should == @ds_content
+      test_obj.someMetadata.controlGroup.should == 'E'
+    end
+
+    # file:// URIs require changes to XACML policies, but http URIs should work
+    it "should create managed datastreams from a given URL" do
+      ds_opts = {:mimeType=>'text/xml',:controlGroup=>'M',:dsLabel=>'Some metadata',
+                 :dsLocation=>@ds_location}
+      ds = @base.create_datastream('ActiveFedora::Datastream', 'someMetadata', ds_opts)
+      @base.add_datastream(ds)
+      @base.save
+      @base.datastreams.keys.include?('someMetadata').should be_true
+      test_obj = ActiveFedora::Base.find(@base.pid)
+      test_obj.someMetadata.content.should == @ds_content
+      test_obj.someMetadata.controlGroup.should == 'M'
+    end
+  end
 end

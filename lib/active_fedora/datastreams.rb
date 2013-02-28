@@ -164,6 +164,11 @@ module ActiveFedora
     end
     
     
+    # Creates a datastream to be added to the object
+    # @param type [Class] the class of the datastream object to be created (or a String that can eval to a class)
+    # @param dsid [String] the dsid of the datastream to be created, or a generated value if false
+    # @param opts [Hash] the ds options to be assigned to the created object, cf. Rubydora::Datastream.DS_ATTRIBUTES
+    # @return [ActiveFedora::Datastream] a datastream object of the type indicated in the parameters
     def create_datastream(type, dsid, opts={})
       dsid ||= generate_dsid(opts[:prefix] || "DS")
       klass = type.kind_of?(Class) ? type : type.constantize
