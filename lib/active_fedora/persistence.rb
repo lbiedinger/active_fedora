@@ -11,8 +11,14 @@ module ActiveFedora
         result = create
         update_index if create_needs_index?
       else
-        result = update
-        update_index if update_needs_index?
+        begin
+          result = update
+          update_index if update_needs_index?
+        rescue ActiveFedora::ReloadNeeded
+          reload
+          save
+        end
+
       end
       return result
     end
@@ -53,6 +59,7 @@ module ActiveFedora
     #the underlying inner_object.  If this object is held in any relationships (ie inbound relationships
     #outside of this object it will remove it from those items rels-ext as well
     def delete
+      reload if loaded_from_cache?
       dependent_objects.each_pair do |predicate, objects|
         objects.each do |obj|
           if obj.respond_to?(:remove_relationship)

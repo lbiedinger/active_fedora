@@ -27,6 +27,10 @@ module ActiveFedora
       @state = @profile['objState']
       @ownerId = @profile['objOwnerId']
     end
+
+    def loaded_from_cache?
+      true
+    end
     
     def freeze
       @finished = true
@@ -43,6 +47,14 @@ module ActiveFedora
     
     def new?
       false
+    end
+
+    def delete
+      raise ActiveFedora::ReloadNeeded
+    end
+
+    def save
+      raise ActiveFedora::ReloadNeeded
     end
 
   end

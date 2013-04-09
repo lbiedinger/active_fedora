@@ -283,6 +283,7 @@ module ActiveFedora
          #this is not hierarchical and we can simply look for the solr name created using the terms without any indexes
          generic_field_name_base = OM::XML::Terminology.term_generic_name(*term_pointer)
          generic_field_name = generate_solr_symbol(generic_field_name_base, term.type)
+         puts "Generic_field name: #{generic_field_name} vl: #{solr_doc[generic_field_name].inspect}"
          value = (solr_doc[generic_field_name].nil? ? solr_doc[generic_field_name.to_s]: solr_doc[generic_field_name])
          unless value.nil?
            value.is_a?(Array) ? values.concat(value) : values << value
@@ -291,8 +292,25 @@ module ActiveFedora
       values
     end
 
+    # Given a term decide whether this is can reasonable be extracted from the values stored in the index
+    def term_is_stored?(term_pointer)
+      # TODO, move this method back into OM
+      term = self.class.terminology.retrieve_term(*OM.pointers_to_flat_array(OM.destringify(term_pointer), false))
+      if term.index_as
+        field_mapper = Solrizer.default_field_mapper
+        term.index_as.any? {|i| find_index_type(field_mapper.indexer(i).index_type, term.type).include?(:stored)}
+      else
+        false
+      end
+    end
+
+    # TODO this is in the latest version of solrizer, use that instead.
+    def find_index_type(index_type, field_type)
+      index_type.first.kind_of?(Proc) ? index_type.first.call(field_type) : index_type.dup
+    end
+
     def generate_solr_symbol(base, data_type)
-      ActiveFedora::SolrService.solr_name(base.to_sym, type: data_type)
+      ActiveFedora::SolrService.solr_name(base, type: data_type)
     end
 
     # ** Experimental **
@@ -396,8 +414,13 @@ module ActiveFedora
     #override OM::XML::term_values so can lazy load from solr if this datastream initialized using +from_solr+
     def term_values(*term_pointer)
       if @internal_solr_doc
-        #lazy load values from solr on demand
-        get_values_from_solr(*term_pointer)
+        if term_is_stored?(term_pointer)
+          #lazy load values from solr on demand
+          get_values_from_solr(*term_pointer)
+        else 
+          self.digital_object = Rubydora::DigitalObject.find(pid, digital_object.repository)
+          om_term_values(*term_pointer)
+        end
       else
         om_term_values(*term_pointer)
       end

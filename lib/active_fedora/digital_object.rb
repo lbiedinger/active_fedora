@@ -50,5 +50,9 @@ module ActiveFedora
       obj.original_class = original_class
       obj
     end
+
+    def loaded_from_cache?
+      false
+    end
   end
 end

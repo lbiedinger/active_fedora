@@ -20,8 +20,8 @@ describe ActiveFedora::Base do
       describe ":all" do
         describe "called on a concrete class" do
           it "should query solr for all objects with :has_model_s of self.class" do
-            SpecModel::Basic.should_receive(:find_one).with("changeme:30", nil).and_return("Fake Object1")
-            SpecModel::Basic.should_receive(:find_one).with("changeme:22", nil).and_return("Fake Object2")
+            SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:30", nil).and_return("Fake Object1")
+            SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:22", nil).and_return("Fake Object2")
             mock_docs = [{"id" => "changeme:30"}, {"id" => "changeme:22"}]
             mock_docs.should_receive(:has_next?).and_return(false)
             ActiveFedora::SolrService.instance.conn.should_receive(:paginate).with(1, 1000, 'select', :params=>{:q=>@model_query, :qt => 'standard', :sort => [@sort_query], :fl=> 'id', }).and_return('response'=>{'docs'=>mock_docs})
@@ -30,8 +30,8 @@ describe ActiveFedora::Base do
         end
         describe "called without a specific class" do
           it "should specify a q parameter" do
-            ActiveFedora::Base.should_receive(:find_one).with("changeme:30", nil).and_return("Fake Object1")
-            ActiveFedora::Base.should_receive(:find_one).with("changeme:22", nil).and_return("Fake Object2")
+            ActiveFedora::Base.should_receive(:find_one_from_index).with("changeme:30", nil).and_return("Fake Object1")
+            ActiveFedora::Base.should_receive(:find_one_from_index).with("changeme:22", nil).and_return("Fake Object2")
             mock_docs = [{"id" => "changeme:30"},{"id" => "changeme:22"}]
             mock_docs.should_receive(:has_next?).and_return(false)
             ActiveFedora::SolrService.instance.conn.should_receive(:paginate).with(1, 1000, 'select', :params=>{:q=>'*:*', :qt => 'standard', :sort => [@sort_query], :fl=> 'id', }).and_return('response'=>{'docs'=>mock_docs})
@@ -41,29 +41,24 @@ describe ActiveFedora::Base do
       end
       describe "and a pid is specified" do
         it "should use SpecModel::Basic.allocate.init_with to instantiate an object" do
-          SpecModel::Basic.any_instance.should_receive(:init_with).and_return(SpecModel::Basic.new)
+          stub_obj = SpecModel::Basic.new
+          ActiveFedora::ContentModel.should_receive(:known_models_for).with(stub_obj).and_return([SpecModel::Basic])
+          SpecModel::Basic.any_instance.should_receive(:init_with).and_return(stub_obj)
           ActiveFedora::DigitalObject.should_receive(:find).and_return(stub("inner obj", :'new?'=>false))
-          SpecModel::Basic.find("_PID_").should be_a SpecModel::Basic
+          SpecModel::Basic.find_in_repository("_PID_").should be_a SpecModel::Basic
         end
         it "should raise an exception if it is not found" do
           Rubydora::Repository.any_instance.should_receive(:object).and_raise(RestClient::ResourceNotFound)
           SpecModel::Basic.should_receive(:connection_for_pid).with("_PID_")
-          lambda {SpecModel::Basic.find("_PID_")}.should raise_error ActiveFedora::ObjectNotFoundError
+          lambda {SpecModel::Basic.find_in_repository("_PID_")}.should raise_error ActiveFedora::ObjectNotFoundError
         end
-      end
-    end
-    describe "with :cast" do
-      it "should use SpecModel::Basic.allocate.init_with to instantiate an object" do
-        SpecModel::Basic.any_instance.should_receive(:init_with).and_return(mock("Model", :adapt_to_cmodel=>SpecModel::Basic.new ))
-        ActiveFedora::DigitalObject.should_receive(:find).and_return(stub("inner obj", :'new?'=>false))
-        SpecModel::Basic.find("_PID_", :cast=>true)
       end
     end
 
     describe "with conditions" do
       it "should filter by the provided fields" do
-        SpecModel::Basic.should_receive(:find_one).with("changeme:30", nil).and_return("Fake Object1")
-        SpecModel::Basic.should_receive(:find_one).with("changeme:22", nil).and_return("Fake Object2")
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:30", nil).and_return("Fake Object1")
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:22", nil).and_return("Fake Object2")
 
         mock_docs = [{"id" => "changeme:30"},{"id" => "changeme:22"}]
         mock_docs.should_receive(:has_next?).and_return(false)
@@ -83,8 +78,8 @@ describe ActiveFedora::Base do
       end
 
       it "should add options" do
-        SpecModel::Basic.should_receive(:find_one).with("changeme:30", nil).and_return("Fake Object1")
-        SpecModel::Basic.should_receive(:find_one).with("changeme:22", nil).and_return("Fake Object2")
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:30", nil).and_return("Fake Object1")
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:22", nil).and_return("Fake Object2")
 
         mock_docs = [{"id" => "changeme:30"},{"id" => "changeme:22"}]
         mock_docs.should_receive(:has_next?).and_return(false)
@@ -113,16 +108,16 @@ describe ActiveFedora::Base do
       mock_docs.should_receive(:has_next?).and_return(false)
       ActiveFedora::SolrService.instance.conn.should_receive(:paginate).with(1, 1000, 'select', :params=>{:q=>@model_query, :qt => 'standard', :sort => [@sort_query], :fl=> 'id', }).and_return('response'=>{'docs'=>mock_docs})
       
-      SpecModel::Basic.should_receive(:find_one).with("changeme:30", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:30'))
-      SpecModel::Basic.should_receive(:find_one).with("changeme:22", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:22'))
+      SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:30", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:30'))
+      SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:22", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:22'))
       yielded = mock("yielded method")
       yielded.should_receive(:run).with { |obj| obj.class == SpecModel::Basic}.twice
       SpecModel::Basic.find_each(){|obj| yielded.run(obj) }
     end
     describe "with conditions" do
       it "should filter by the provided fields" do
-        SpecModel::Basic.should_receive(:find_one).with("changeme:30", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:30'))
-        SpecModel::Basic.should_receive(:find_one).with("changeme:22", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:22'))
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:30", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:30'))
+        SpecModel::Basic.should_receive(:find_one_from_index).with("changeme:22", nil).and_return(SpecModel::Basic.new(:pid=>'changeme:22'))
 
         mock_docs = [{"id" => "changeme:30"},{"id" => "changeme:22"}]
         mock_docs.should_receive(:has_next?).and_return(false)

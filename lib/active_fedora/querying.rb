@@ -62,7 +62,7 @@ module ActiveFedora
     def find_each( conditions={}, opts={})
       find_in_batches(conditions, opts.merge({:fl=>SOLR_DOCUMENT_ID})) do |group|
         group.each do |hit|
-          yield(find_one(hit[SOLR_DOCUMENT_ID], opts[:cast]))
+          yield(find_one_from_index(hit[SOLR_DOCUMENT_ID], opts[:cast]))
         end
       end
     end
@@ -84,6 +84,7 @@ module ActiveFedora
     # @param[Hash] options 
     # @option opts [Array] :sort a list of fields to sort by 
     # @option opts [Array] :rows number of rows to return
+    # @return [Hash] a solr document matching the query
     def find_with_conditions(conditions, opts={})
       #set default sort to created date ascending
       unless opts.include?(:sort)
@@ -104,10 +105,17 @@ module ActiveFedora
     #
     # @example because the object hydra:dataset1 asserts it is a Dataset (hasModel info:fedora/afmodel:Dataset), return a Dataset object (not a Book).
     #   Book.find_one("hydra:dataset1") 
-    def find_one(pid, cast=false)
+    def find_in_repository(pid)
       inner = DigitalObject.find(self, pid)
       af_base = self.allocate.init_with(inner)
-      cast ? af_base.adapt_to_cmodel : af_base
+      af_base.adapt_to_cmodel
+    end
+
+    def find_one_from_index(pid, cast=true)
+      load_instance_from_solr(pid)
+      # inner = DigitalObject.find(self, pid)
+      # af_base = self.allocate.init_with(inner)
+      # cast ? af_base.adapt_to_cmodel : af_base
     end
     
     private 

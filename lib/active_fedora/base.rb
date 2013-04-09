@@ -26,6 +26,9 @@ module ActiveFedora
     include SemanticNode
 
     class_attribute :fedora_connection, :profile_solr_name
+
+    delegate :loaded_from_cache?, :to => :inner_object
+
     self.fedora_connection = {}
     self.profile_solr_name = ActiveFedora::SolrService.solr_name("object_profile", :displayable)
 
@@ -82,7 +85,7 @@ module ActiveFedora
     # Reloads the object from Fedora.
     def reload
       clear_association_cache
-      init_with(self.class.find(self.pid).inner_object)
+      init_with(self.class.find_in_repository(self.pid).inner_object)
     end
 
     # Initialize an empty model object and set the +inner_obj+

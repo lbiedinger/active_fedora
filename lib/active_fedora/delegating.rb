@@ -111,7 +111,12 @@ module ActiveFedora
         end
 
         define_method field do
+          begin
           val = self[field]
+          rescue ActiveFedora::ReloadNeeded
+            self.reload
+            val = self.send field
+          end
           args[:unique] ? val.first : val
         end
       end

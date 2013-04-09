@@ -33,6 +33,7 @@ module ActiveFedora
     #  m.update_attributes({"fubar"=>{"-1"=>"mork", "0"=>"york", "1"=>"mangle"}}, :datastreams=>["my_ds", "my_other_ds"])
     #
     def update_indexed_attributes(params={}, opts={})
+      reload if loaded_from_cache?
       if ds = opts[:datastreams]
         ds_array = []
         ds = [ds] unless ds.respond_to? :each

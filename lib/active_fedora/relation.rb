@@ -117,7 +117,7 @@ module ActiveFedora
       when 0
         raise ArgumentError, "Couldn't find #{@klass.name} without an ID"
       when 1
-        result = @klass.find_one(ids.first, cast)
+        result = @klass.find_one_from_index(ids.first, cast)
         expects_array ? [ result ] : result
       else
         find_some(ids, cast)
@@ -125,7 +125,7 @@ module ActiveFedora
     end
 
     def find_some(ids, cast)
-      ids.map{|id| @klass.find_one(id, cast)}
+      ids.map{|id| @klass.find_one_from_index(id, cast)}
     end
 
     # A convenience wrapper for <tt>find(:all, *args)</tt>. You can pass in all the

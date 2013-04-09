@@ -16,6 +16,7 @@ module ActiveFedora
       validate_solr_doc_and_pid!(@solr_doc)
     end
 
+    # @return [ActiveFedora::Base] the model represented by this instance
     def object
       return @object if @object
       @object = allocate_object

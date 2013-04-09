@@ -44,8 +44,9 @@ module ActiveFedora
         self.original_class.assign_pid(self)
     end
 
-
-
+    def loaded_from_cache?
+      false
+    end
   end
 end
 
