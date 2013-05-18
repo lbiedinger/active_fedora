@@ -74,6 +74,7 @@ END
 
     it "should build complex objects when a parent node exists" do
       ds.parts  #this creates a parts node, but it shouldn't
+      debugger
       part = ds.parts.build
       part.should be_kind_of SpecDatastream::Component
       part.label = "Wheel bearing"

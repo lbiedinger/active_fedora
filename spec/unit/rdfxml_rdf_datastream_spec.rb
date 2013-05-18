@@ -44,12 +44,13 @@ describe ActiveFedora::RdfxmlRDFDatastream do
         property :value
       end
 
-      module RDF
-        # This enables RDF to respond_to? :value
-        def self.value 
-          self[:value]
-        end
-      end
+      # Moved this into the runtime code - MZ 05-2013
+      # module RDF
+      #   # This enables RDF to respond_to? :value
+      #   def self.value 
+      #     self[:value]
+      #   end
+      # end
 
       class MyDatastream < ActiveFedora::RdfxmlRDFDatastream
         map_predicates do |map|
@@ -96,6 +97,13 @@ describe ActiveFedora::RdfxmlRDFDatastream do
       subject { MyDatastream.new(stub('inner object', :pid=>'test:1', :new? =>true), 'descMetadata', about:"http://library.ucsd.edu/ark:/20775/") }
       it "should have a subject" do
         subject.rdf_subject.to_s.should == "http://library.ucsd.edu/ark:/20775/"
+      end
+      it "should set values" do
+        subject.title = "My new Title"
+        subject.title[0].value.should == ["My new Title"]
+        subject.title << "Quantum States"
+        subject.title[0].value.should == ["My new Title"]
+        subject.title[1].value.should == ["Quantum States"]
       end
       
     end

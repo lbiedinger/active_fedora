@@ -1,3 +1,10 @@
+module RDF
+  # This enables RDF to respond_to? :value so you can make assertions with http://www.w3.org/1999/02/22-rdf-syntax-ns#value
+  def self.value 
+    self[:value]
+  end
+end
+
 module ActiveFedora
   module RdfNode
     extend ActiveSupport::Concern
@@ -48,21 +55,16 @@ module ActiveFedora
       options = config_for_term_or_uri(predicate)
       predicate = options[:predicate]
       values = Array(values)
-
+      
       remove_existing_values(subject, predicate, values)
 
       values.each do |arg|
-        if arg.respond_to?(:rdf_subject) # an RdfObject
-          graph.insert([subject, predicate, arg.rdf_subject ])
-        else
-          arg = arg.to_s if arg.kind_of? RDF::Literal
-          graph.insert([subject, predicate, arg])
-        end
+        append(subject, predicate, arg)
       end
-
+      
       TermProxy.new(self, subject, predicate, options)
     end
- 
+    
     def delete_predicate(subject, predicate, values = nil)
       predicate = find_predicate(predicate) unless predicate.kind_of? RDF::URI
 
@@ -81,12 +83,40 @@ module ActiveFedora
       end
     end
 
-    # append a value 
+    # append a value
     # @param [Symbol, RDF::URI] predicate  the predicate to insert into the graph
-    def append(subject, predicate, args)
+    def append(subject, predicate, value)
       options = config_for_term_or_uri(predicate)
-      graph.insert([subject, predicate, args])
-      TermProxy.new(self, subject, options[:predicate], options)
+      term_proxy = TermProxy.new(self, subject, predicate, options)
+
+      if value.respond_to?(:rdf_subject) # an RdfObject
+        graph.insert([subject, predicate, value.rdf_subject ])
+      elsif options.has_key?(:class_name)
+        new_node = term_proxy.build
+        new_node.populate_default(value, options)
+      else
+        value = value.to_s if value.kind_of? RDF::Literal
+        graph.insert([subject, predicate, value])
+      end
+      
+      return term_proxy
+    end
+    
+    # Set values within the node according to its Class defaults
+    # If no defaults have been set on the Class, values are inserted as RDF.value properties, accessible on all nodes as .value
+    # If you want `.value` to map to somewhere else, simply set the :value property on your Class.
+    def populate_default(values, options)
+      # options = config_for_term_or_uri(predicate)
+      if options.has_key?(:default_predicate)
+        set_value(self.rdf_subject, options[:default_predicate], values)
+      else
+        # This inserts support for RDF.value into any Class that doesn't already have it.
+        # Possibly we should make RDF::Object or RDF::Node automatically do this by default? - MZ 05-2013
+        unless self.class.config.has_key?(:value)
+          self.class.map_predicates {|map| map.value(in: RDF)}
+        end
+        set_value(self.rdf_subject, :value, values)
+      end
     end
 
     def config_for_term_or_uri(term)
