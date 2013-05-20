@@ -1,3 +1,4 @@
+# Ugly hack to allow defining of properties in the RDF vocabulary's namespace (ie. RDF.type, RDF.value) within map_properties
 module RDF
   # This enables RDF to respond_to? :value so you can make assertions with http://www.w3.org/1999/02/22-rdf-syntax-ns#value
   def self.value 
@@ -31,13 +32,56 @@ module ActiveFedora
     def reset_rdf_subject!
       @subject = nil
     end
+    
+    # Specifies the default location for writing values on this type of Node.
+    # This primarily affects what happens when you use `=` or `<<` to set values on a Node or use `.value` to get the values of a node.
+    # To make your Node classes write/read values to/from a custom location, override this method
+    # Defaults to using :value property, which defaults to using the RDF.value predicate `http://www.w3.org/1999/02/22-rdf-syntax-ns#value`
+    # This method should always return an Array of properties that can be traversed using the current node as the starting point.
+    # @example Use default behavior to put assertions in `http://www.w3.org/1999/02/22-rdf-syntax-ns#value`
+    #   @ds.topic = "Cosmology"
+    #   @ds.value
+    #   => ["Cosmology"]
+    #
+    # @example Set default write point to [:elementList, :topicElement]
+    #   class Topic
+    #     include ActiveFedora::RdfObject
+    #     def default_write_point_for_values 
+    #       [:elementList, :topicElement]
+    #     end
+    #   
+    #     # rdf_type DummyMADS.Topic
+    #     map_predicates do |map|
+    #       map.elementList(in: DummyMADS, to: "elementList", class_name:"DummyMADS::ElementList")
+    #     end
+    #   end
+    #   class ElementList
+    #     include ActiveFedora::RdfObject
+    #     rdf_type DummyMADS.elementList
+    #     map_predicates do |map|
+    #       map.topicElement(in: DummyMADS, to: "TopicElement")
+    #     end
+    #   end
+    #
+    #   @ds.topic = "Cosmology"
+    #   @ds.topic(0).elementList.topicElement
+    #   => "Cosmology"
+    #   @ds.topic.value = ["Cosmology"]
+    def default_write_point_for_values 
+      [:value]
+    end
 
     # @param [RDF::URI] subject the base node to start the search from
     # @param [Symbol] term the term to get the values for
-    def get_values(subject, term)
+    def get_values(subject, term, *args)
       options = config_for_term_or_uri(term)
       predicate = options[:predicate]
-      TermProxy.new(self, subject, predicate, options)
+      proxy = TermProxy.new(self, subject, predicate, options)
+      if args.first.kind_of?(Integer)
+        return proxy.nodeset[args.first]
+      else
+        return proxy
+      end
     end
 
     def target_class(predicate)
@@ -89,6 +133,12 @@ module ActiveFedora
       options = config_for_term_or_uri(predicate)
       term_proxy = TermProxy.new(self, subject, predicate, options)
 
+      if predicate == :value
+        unless self.class.config.has_key?(:value)
+          self.class.map_predicates {|map| map.value(in: RDF)}
+        end
+      end
+      
       if value.respond_to?(:rdf_subject) # an RdfObject
         graph.insert([subject, predicate, value.rdf_subject ])
       elsif options.has_key?(:class_name)
@@ -102,21 +152,64 @@ module ActiveFedora
       return term_proxy
     end
     
-    # Set values within the node according to its Class defaults
-    # If no defaults have been set on the Class, values are inserted as RDF.value properties, accessible on all nodes as .value
-    # If you want `.value` to map to somewhere else, simply set the :value property on your Class.
-    def populate_default(values, options)
-      # options = config_for_term_or_uri(predicate)
-      if options.has_key?(:default_predicate)
-        set_value(self.rdf_subject, options[:default_predicate], values)
-      else
+    # Returns the (sometimes computed) value of the current node
+    def value
+      if default_write_point_for_values.first == :value
+      
         # This inserts support for RDF.value into any Class that doesn't already have it.
         # Possibly we should make RDF::Object or RDF::Node automatically do this by default? - MZ 05-2013
         unless self.class.config.has_key?(:value)
           self.class.map_predicates {|map| map.value(in: RDF)}
         end
-        set_value(self.rdf_subject, :value, values)
+        
+        return get_values(self.rdf_subject, :value)
+      else
+        return retrieve_values(default_write_point_for_values)
       end
+    end
+    
+    # Set values within the node according to its Class defaults
+    # If no defaults have been set on the Class, values are inserted as RDF.value properties, accessible on all nodes as .value
+    # If you want `.value` to map to somewhere else, simply set the :value property on your Class.
+    def populate_default(values, options)
+      parent = self
+      if default_write_point_for_values.length > 1
+        path = default_write_point_for_values.dup
+        last_property = path.pop
+        parent = retrieve_node(path)
+      else
+        last_property = default_write_point_for_values.first
+      end
+      parent.set_value(parent.rdf_subject, last_property, values)
+    end
+    
+    # Retrieves a node based on path composed of node properties to traverse
+    def retrieve_node(node_path, options={build_nodes: true})
+      build_nodes = options.has_key?(:build_nodes) ? options[:build_nodes] : true
+      current_node = self
+      node_path.each do |property,i|
+        if current_node.send(property).empty?
+          if build_nodes
+            current_node = current_node.send(property).build
+          else
+            raise "Could not retrieve node at #{node_path}. There is no node at #{property}.  Would have automatically generated the missing nodes, but you set `:build_nodes` to `false`. Current graph: #{puts graph.dump(:ntriples)}"
+          end
+        else
+          current_node = current_node.send(property).nodeset.first
+        end
+      end
+      return current_node
+    end
+    
+    # Traverse a path of node properties and return the value of the last property
+    def retrieve_values(node_path)
+      last_property_from_path = node_path.pop
+      if node_path.empty?
+        node = self
+      else
+        node = retrieve_node(node_path)
+      end
+      return node.get_values(node.rdf_subject, last_property_from_path)
     end
 
     def config_for_term_or_uri(term)
@@ -148,7 +241,7 @@ module ActiveFedora
       if (md = /^([^=]+)=$/.match(name.to_s)) && pred = find_predicate(md[1])
           set_value(rdf_subject, pred, *args)  
       elsif find_predicate(name)
-          get_values(rdf_subject, name)
+          get_values(rdf_subject, name, *args)
       else 
         super
       end
@@ -204,28 +297,33 @@ module ActiveFedora
       end
 
       def method_missing(name, *args, &block)
-        args = args.first if args.respond_to? :first
-        raise "mapping must specify RDF vocabulary as :in argument" unless args.has_key? :in
-        vocab = args[:in]
-        field = args.fetch(:to, name).to_sym
-        class_name = args[:class_name]
-        raise "Vocabulary '#{vocab.inspect}' does not define property '#{field.inspect}'" unless vocab.respond_to? field
-        indexing = false
-        if block_given?
-          # needed for solrizer integration
-          indexing = true
-          iobj = IndexObject.new
-          yield iobj
-          data_type = iobj.data_type
-          behaviors = iobj.behaviors
+        case name
+        when :computed!
+          puts "Setting computed term with #{name} and  #{args.inspect}"
+        else ### define new term
+          args = args.first if args.respond_to? :first
+          raise "mapping must specify RDF vocabulary as :in argument" unless args.has_key? :in
+          vocab = args[:in]
+          field = args.fetch(:to, name).to_sym
+          class_name = args[:class_name]
+          raise "Vocabulary '#{vocab.inspect}' does not define property '#{field.inspect}'" unless vocab.respond_to? field
+          indexing = false
+          if block_given?
+            # needed for solrizer integration
+            indexing = true
+            iobj = IndexObject.new
+            yield iobj
+            data_type = iobj.data_type
+            behaviors = iobj.behaviors
+          end
+          @parent.config[name] = {:predicate => vocab.send(field) } 
+          # stuff data_type and behaviors in there for to_solr support
+          if indexing
+            @parent.config[name][:type] = data_type
+            @parent.config[name][:behaviors] = behaviors
+          end
+          @parent.config[name][:class_name] = class_name if class_name
         end
-        @parent.config[name] = {:predicate => vocab.send(field) } 
-        # stuff data_type and behaviors in there for to_solr support
-        if indexing
-          @parent.config[name][:type] = data_type
-          @parent.config[name][:behaviors] = behaviors
-        end
-        @parent.config[name][:class_name] = class_name if class_name
       end
 
       # this enables a cleaner API for solr integration

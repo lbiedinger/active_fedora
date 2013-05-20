@@ -37,7 +37,13 @@ module ActiveFedora
         values
       end
 
-      def values
+      # Return this TermProxy
+      def proxy
+        self
+      end
+      
+      # Return the Set of RDF Nodes that this Term points to
+      def nodeset
         values = []
 
         graph.query(subject, predicate).each do |solution|
@@ -58,6 +64,32 @@ module ActiveFedora
 
         if options[:class_name]
           values = values.map{ |found_subject| class_from_rdf_type(found_subject, predicate).new(graph.graph, found_subject)}
+        end
+        
+        values
+      end
+      
+      def values
+        values = []
+
+        graph.query(subject, predicate).each do |solution|
+          v = solution.value
+          v = v.to_s if v.is_a? RDF::Literal
+          if options[:type] == :date
+            v = Date.parse(v)
+          end
+          # If the user provided options[:class_name], we should query to make sure this 
+          # potential solution is of the right RDF.type
+          if options[:class_name]
+            klass =  class_from_rdf_type(v, predicate)
+            values << v if klass == ActiveFedora.class_from_string(options[:class_name], graph.class)
+          else
+            values << v
+          end
+        end
+
+        if options[:class_name]
+          values = values.map{ |found_subject| class_from_rdf_type(found_subject, predicate).new(graph.graph, found_subject).value.join}
         end
         
         values

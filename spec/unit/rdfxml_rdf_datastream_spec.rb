@@ -100,10 +100,10 @@ describe ActiveFedora::RdfxmlRDFDatastream do
       end
       it "should set values" do
         subject.title = "My new Title"
-        subject.title[0].value.should == ["My new Title"]
+        subject.title(0).value.should == ["My new Title"]
         subject.title << "Quantum States"
-        subject.title[0].value.should == ["My new Title"]
-        subject.title[1].value.should == ["Quantum States"]
+        subject.title(0).value.should == ["My new Title"]
+        subject.title(1).value.should == ["Quantum States"]
       end
       
     end
@@ -128,7 +128,7 @@ describe ActiveFedora::RdfxmlRDFDatastream do
       end
       it "should have fields" do
         subject.resource_type.should == ["image"]
-        subject.title.first.value.should == ["example title"]
+        subject.title(0).value.should == ["example title"]
       end
     end
   end

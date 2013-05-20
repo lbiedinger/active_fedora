@@ -32,7 +32,7 @@ describe "Nested Rdf Objects" do
       comp = SpecDatastream::Component.new(ds.graph)
       comp.label = ["Alternator"]
       ds.parts = comp
-      ds.parts.first.label.should == ["Alternator"]
+      ds.parts(0).label.should == ["Alternator"]
     end
 
     it "should be able to nest many complex objects" do
@@ -41,8 +41,8 @@ describe "Nested Rdf Objects" do
       comp2 = SpecDatastream::Component.new ds.graph
       comp2.label = ["Crankshaft"]
       ds.parts = [comp1, comp2]
-      ds.parts.first.label.should == ["Alternator"]
-      ds.parts.last.label.should == ["Crankshaft"]
+      ds.parts(0).label.should == ["Alternator"]
+      ds.parts.nodeset.last.label.should == ["Crankshaft"]
     end
 
     it "should be able to clear complex objects" do
@@ -62,14 +62,14 @@ _:g70350851837440 <http://purl.org/dc/terms/title> "Alternator" .
 <info:fedora/test:124> <http://purl.org/dc/terms/hasPart> _:g70350851833380 .
 _:g70350851833380 <http://purl.org/dc/terms/title> "Crankshaft" .
 END
-      ds.parts.first.label.should == ["Alternator"]
+      ds.parts(0).label.should == ["Alternator"]
     end
 
     it "should build complex objects when a parent node doesn't exist" do
       part = ds.parts.build
       part.should be_kind_of SpecDatastream::Component
       part.label = "Wheel bearing"
-      ds.parts.first.label.should == ['Wheel bearing']
+      ds.parts(0).label.should == ['Wheel bearing']
     end
 
     it "should build complex objects when a parent node exists" do
@@ -78,7 +78,7 @@ END
       part = ds.parts.build
       part.should be_kind_of SpecDatastream::Component
       part.label = "Wheel bearing"
-      ds.parts.first.label.should == ['Wheel bearing']
+      ds.parts(0).label.should == ['Wheel bearing']
     end
   end
 
@@ -115,9 +115,9 @@ END
         comp = SpecDatastream::MediatorUser.new ds.graph
         comp.title = ["Doctor"]
         ds.mediator = comp
-        ds.mediator.first.type.first.should be_instance_of RDF::URI
-        ds.mediator.first.type.first.to_s.should == "http://purl.org/dc/terms/AgentClass"
-        ds.mediator.first.title.first.should == 'Doctor'
+        ds.mediator(0).type.first.should be_instance_of RDF::URI
+        ds.mediator(0).type.first.to_s.should == "http://purl.org/dc/terms/AgentClass"
+        ds.mediator(0).title.first.should == 'Doctor'
       end
 
       it "should add the type of complex object when it is not provided" do
@@ -125,7 +125,7 @@ END
   _:g70350851837440 <http://purl.org/dc/terms/title> "Mediation Person" .
   <info:fedora/test:124> <http://purl.org/dc/terms/mediator> _:g70350851837440 .
 END
-        ds.mediator.first.type.first.to_s.should == "http://purl.org/dc/terms/AgentClass"
+        ds.mediator(0).type.first.to_s.should == "http://purl.org/dc/terms/AgentClass"
       end
 
       it "should add load the type of complex objects when provided (superceeding what is specified by the class)" do
@@ -134,7 +134,7 @@ END
   _:g70350851837440 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.ebu.ch/metadata/ontologies/ebucore#Organisation> .
   <info:fedora/test:124> <http://purl.org/dc/terms/mediator> _:g70350851837440 .
 END
-        ds.mediator.first.type.first.to_s.should == "http://www.ebu.ch/metadata/ontologies/ebucore#Organisation"
+        ds.mediator(0).type.first.to_s.should == "http://www.ebu.ch/metadata/ontologies/ebucore#Organisation"
       end
     end
 
@@ -189,10 +189,10 @@ END
         program.title = ["This old House"]
         ds.program = program
 
-        ds.program.first.type.size.should == 1
-        ds.program.first.type.first.to_s.should == 'http://www.ebu.ch/metadata/ontologies/ebucore#Programme' 
-        ds.series.first.type.size.should == 1
-        ds.series.first.type.first.to_s.should == 'http://www.ebu.ch/metadata/ontologies/ebucore#Series' 
+        ds.program(0).type.size.should == 1
+        ds.program(0).type.first.to_s.should == 'http://www.ebu.ch/metadata/ontologies/ebucore#Programme' 
+        ds.series(0).type.size.should == 1
+        ds.series(0).type.first.to_s.should == 'http://www.ebu.ch/metadata/ontologies/ebucore#Series' 
       end
 
     end

@@ -128,7 +128,7 @@ END
       subject.rdf_subject.to_s.should == "info:fedora/foo"
     end
     it "should have fields" do
-      list = subject.elementList.first
+      list = subject.elementList(0)
       list.first.should == "http://library.ucsd.edu/ark:/20775/bbXXXXXXX6"
       list[1].should be_kind_of DemoList::List::TopicElement
       list[1].elementValue.should == ["Relations with Mexican Americans"]
@@ -138,12 +138,12 @@ END
     end
 
     it "should have size" do
-      list = subject.elementList.first
+      list = subject.elementList(0)
       list.size.should == 4
     end
 
     it "should update fields" do
-      list = subject.elementList.first
+      list = subject.elementList(0)
       list[3].elementValue = ["1900s"]
       expected_xml =<<END
   <rdf:RDF
