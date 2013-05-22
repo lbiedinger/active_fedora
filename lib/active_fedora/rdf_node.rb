@@ -38,6 +38,9 @@ module ActiveFedora
     # To make your Node classes write/read values to/from a custom location, override this method
     # Defaults to using :value property, which defaults to using the RDF.value predicate `http://www.w3.org/1999/02/22-rdf-syntax-ns#value`
     # This method should always return an Array of properties that can be traversed using the current node as the starting point.
+    # 
+    # Note: Much of the behavior that this setting affects is implemented in the `populate_default` method.
+    #
     # @example Use default behavior to put assertions in `http://www.w3.org/1999/02/22-rdf-syntax-ns#value`
     #   @ds.topic = "Cosmology"
     #   @ds.value
