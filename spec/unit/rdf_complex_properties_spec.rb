@@ -125,38 +125,18 @@ describe ActiveFedora::RDFDatastream do
     subject { @ds } 
     
     describe "complex properties" do
-      it "should support assignment operator, assertion operator, and computed properties" do
-        # @ds.topic.build
-        # @ds.topic.first.elementList.build
-        # @ds.topic[0].elementList[0].topicElement = "Cosmology"
-        # puts @ds.graph.dump(:rdfxml)
-        # puts @ds.graph.dump(:ntriples)
+      it "should insert values at default_write_point_for_values" do
+        @ds.topic = "Software Testing"
+        @ds.topic.should = ["Software Testing"]
+        @ds.topic.nodeset.first.default_write_point_for_values.should == [:elementList, :topicElement]
+        @ds.topic(0).elementList(0).topicElement.should == ["Software Testing"]
+      end
+      it "should support assignment operator and insertion operator" do
         @ds.topic = ["Cosmology"]
         @ds.topic << "Quantum States"
         @ds.topic.should == ["Cosmology", "Quantum States"]
+        @ds.topic.nodeset.first.default_write_point_for_values.should == [:elementList, :topicElement]
         @ds.topic(0).elementList(0).topicElement.should == ["Cosmology"] 
-        # @ds.topic(0).authoritativeLabel.should == "Cosmology"
-        
-        simplified_expected_xml = '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:mads="http://www.loc.gov/mads/rdf/v1#">
-           <rdf:Description rdf:about="info:fedora/foo">
-           <mads:Topic>
-          <mads:authoritativeLabel>Cosmology</mads:authoritativeLabel>
-          <mads:elementList rdf:parseType="Collection">
-            <mads:TopicElement>
-              <mads:elementValue>Cosmology</mads:elementValue>
-            </mads:TopicElement>
-          </mads:elementList>
-        </mads:Topic>
-        <mads:Topic>
-          <mads:authoritativeLabel>Quantum States</mads:authoritativeLabel>
-          <mads:elementList rdf:parseType="Collection">
-            <mads:TopicElement>
-              <mads:elementValue>Quantum States</mads:elementValue>
-            </mads:TopicElement>
-          </mads:elementList>
-        </mads:Topic>
-        </rdf:Description>
-        </rdf:RDF>'
         
         list1_id = @ds.topic(0).elementList(0).rdf_subject.id
         list2_id = @ds.topic(1).elementList(0).rdf_subject.id
@@ -352,12 +332,5 @@ describe ActiveFedora::RDFDatastream do
         @ds.complexSubject(1).componentList(0).topic.should == ["Slavery"]
       end
     end
-    
-
-    # it "should create proper XML when stuff has been inserted" do
-    #   @resource.personalName << "Jefferson Randolph, Martha"
-    #   @resource.complexSubject << {personalName: "Callender, James T.", topic:"Newspapers"}
-    #   @resource.content.should be_equivalent_to fixture("damsSubjectExpectedOutput.rdf.xml")
-    # end
 
 end
