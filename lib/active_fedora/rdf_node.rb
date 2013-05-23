@@ -33,6 +33,12 @@ module ActiveFedora
       @subject = nil
     end
     
+    # def attributes=(attibutes_hash)
+    #   attibutes_hash.each_pair do |property, value|
+    #     
+    #   end
+    # end
+    
     # Specifies the default location for writing values on this type of Node.
     # This primarily affects what happens when you use `=` or `<<` to set values on a Node or use `.value` to get the values of a node.
     # To make your Node classes write/read values to/from a custom location, override this method
@@ -89,6 +95,9 @@ module ActiveFedora
 
     def target_class(predicate)
       _, conf = self.class.config_for_predicate(predicate)
+      if conf.nil?
+        raise "The #{self.class} RDF Class does not have a predicate called #{predicate.inspect}.  Available predicates are: #{self.class.config.values.map {|v| v[:predicate].to_s}}"
+      end
       class_name = conf[:class_name]
       return nil unless class_name
       ActiveFedora.class_from_string(class_name, self.class)
@@ -101,12 +110,18 @@ module ActiveFedora
     def set_value(subject, predicate, values)
       options = config_for_term_or_uri(predicate)
       predicate = options[:predicate]
-      values = Array(values)
-      
-      remove_existing_values(subject, predicate, values)
-
-      values.each do |arg|
-        append(subject, predicate, arg)
+      if values.kind_of? Hash
+        remove_existing_values(subject, predicate, values.keys)
+        values.each_pair do |pred, val|
+          pred_uri = find_predicate(pred) unless pred.kind_of? RDF::URI
+          append(subject, pred_uri, val)
+        end
+      else
+        values = Array(values)  
+        remove_existing_values(subject, predicate, values)
+        values.each do |arg|
+          append(subject, predicate, arg)
+        end
       end
       
       TermProxy.new(self, subject, predicate, options)
@@ -144,16 +159,28 @@ module ActiveFedora
       
       if value.respond_to?(:rdf_subject) # an RdfObject
         graph.insert([subject, predicate, value.rdf_subject ])
-      elsif options.has_key?(:class_name)
-        new_node = term_proxy.build
-        new_node.populate_default(value, options)
-      else
+      elsif value.kind_of? Array  # If it's an array of values, repeat append method for each of the values
+        value.each do |val|
+          self.append(self.rdf_subject, predicate, val)
+        end
+      elsif options.has_key?(:class_name) # If a class_name has been associated with the property being set, build a node based on that class & insert the values into that node.  
+        new_node = term_proxy.build 
+        if value.kind_of? Hash
+          value.each_pair do |pred, val|
+            pred_uri = new_node.find_predicate(pred)
+            new_node.append(new_node.rdf_subject, pred_uri, val)
+          end
+        else
+          new_node.populate_default(value, options)
+        end
+      else # Everything else converted into string literals.  Note: Hashes are converted to strings if no class_name was available b/c you would need the properties defined in an RDF::Node Class to parse the Hash. 
         value = value.to_s if value.kind_of? RDF::Literal
         graph.insert([subject, predicate, value])
       end
       
       return term_proxy
     end
+    
     
     # Returns the (sometimes computed) value of the current node
     def value
@@ -219,8 +246,15 @@ module ActiveFedora
       case term
       when RDF::URI
         self.class.config.each { |k, v| return v if v[:predicate] == term}
+      when nil
+        {}
       else
-        self.class.config[term.to_sym]
+        result = self.class.config[term.to_sym]
+        if result.nil?
+          return {}
+        else
+          return result
+        end
       end
     end
 
@@ -240,6 +274,10 @@ module ActiveFedora
       q.execute(graph, &block)
     end
 
+    def attributes=(values)
+      set_value(rdf_subject, nil, values)
+    end
+    
     def method_missing(name, *args)
       if (md = /^([^=]+)=$/.match(name.to_s)) && pred = find_predicate(md[1])
           set_value(rdf_subject, pred, *args)  
@@ -300,33 +338,28 @@ module ActiveFedora
       end
 
       def method_missing(name, *args, &block)
-        case name
-        when :computed!
-          puts "Setting computed term with #{name} and  #{args.inspect}"
-        else ### define new term
-          args = args.first if args.respond_to? :first
-          raise "mapping must specify RDF vocabulary as :in argument" unless args.has_key? :in
-          vocab = args[:in]
-          field = args.fetch(:to, name).to_sym
-          class_name = args[:class_name]
-          raise "Vocabulary '#{vocab.inspect}' does not define property '#{field.inspect}'" unless vocab.respond_to? field
-          indexing = false
-          if block_given?
-            # needed for solrizer integration
-            indexing = true
-            iobj = IndexObject.new
-            yield iobj
-            data_type = iobj.data_type
-            behaviors = iobj.behaviors
-          end
-          @parent.config[name] = {:predicate => vocab.send(field) } 
-          # stuff data_type and behaviors in there for to_solr support
-          if indexing
-            @parent.config[name][:type] = data_type
-            @parent.config[name][:behaviors] = behaviors
-          end
-          @parent.config[name][:class_name] = class_name if class_name
+        args = args.first if args.respond_to? :first
+        raise "mapping must specify RDF vocabulary as :in argument" unless args.has_key? :in
+        vocab = args[:in]
+        field = args.fetch(:to, name).to_sym
+        class_name = args[:class_name]
+        raise "Vocabulary '#{vocab.inspect}' does not define property '#{field.inspect}'" unless vocab.respond_to? field
+        indexing = false
+        if block_given?
+          # needed for solrizer integration
+          indexing = true
+          iobj = IndexObject.new
+          yield iobj
+          data_type = iobj.data_type
+          behaviors = iobj.behaviors
         end
+        @parent.config[name] = {:predicate => vocab.send(field) } 
+        # stuff data_type and behaviors in there for to_solr support
+        if indexing
+          @parent.config[name][:type] = data_type
+          @parent.config[name][:behaviors] = behaviors
+        end
+        @parent.config[name][:class_name] = class_name if class_name
       end
 
       # this enables a cleaner API for solr integration
