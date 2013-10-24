@@ -14,6 +14,12 @@ rescue LoadError
 end
 
 require 'active-fedora'
+
+# Uncomment to use the active_record_driver
+# This gives you much faster tests, but does not have versions
+require 'active_fedora/active_record_driver'
+
+
 require 'rspec'
 require 'equivalent-xml/rspec_matchers'
 

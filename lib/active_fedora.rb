@@ -25,6 +25,7 @@ module ActiveFedora #:nodoc:
 
 
   eager_autoload do
+    autoload :ActiveRecordDriver
     autoload :Associations
     autoload :Attributes
     autoload :Auditable

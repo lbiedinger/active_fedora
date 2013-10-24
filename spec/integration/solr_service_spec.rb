@@ -1,7 +1,5 @@
 require 'spec_helper'
 
-require 'active_fedora'
-
 describe ActiveFedora::SolrService do
   describe "#reify_solr_results" do
     before(:all) do

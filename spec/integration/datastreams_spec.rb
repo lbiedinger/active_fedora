@@ -1,6 +1,5 @@
 require 'spec_helper'
 
-require 'active_fedora'
 require "rexml/document"
 
 describe ActiveFedora::Datastreams do

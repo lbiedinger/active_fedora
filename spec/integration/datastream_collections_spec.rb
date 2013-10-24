@@ -123,5 +123,4 @@ describe ActiveFedora::DatastreamCollections do
       expect(named_datastreams_ids['thumbnail'].sort).to eq(["THUMB1", "THUMB2"])
     end
   end
-
 end

@@ -12,3 +12,8 @@ bin
 .idea
 .ruby-version
 .ruby-gemset
+
+# Ignore databases
+/db/*.sqlite3
+/db/*.sqlite3-journal
+

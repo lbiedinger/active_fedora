@@ -18,6 +18,8 @@ Gem::Specification.new do |s|
   s.add_dependency('om', '~> 3.0.0')
   s.add_dependency('nom-xml', '>=0.5.1')
   s.add_dependency("activesupport", '>= 3.0.0')
+  s.add_dependency("activerecord", '>= 3.0.0')
+  s.add_dependency("sqlite3")
   s.add_dependency("mediashelf-loggable")
   s.add_dependency("rubydora", '~>1.6', '>= 1.6.5')
   s.add_dependency("rdf")
