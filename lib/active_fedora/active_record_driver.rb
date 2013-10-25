@@ -216,7 +216,12 @@ eos
       query_options = options.dup
       pid = query_options.delete(:pid)
       run_hook :before_modify_object, :pid => pid, :options => options
-      RepoObject.where(pid: pid).first.update(options)
+      obj = RepoObject.where(pid: pid).first
+      if obj.respond_to? :update
+        obj.update(options)
+      else
+        obj.update_attributes(options)
+      end
     end
 
     # {include:RestApiClient::API_DOCUMENTATION}
@@ -399,7 +404,11 @@ eos
       ds = ds.dup if ds.versionable?
       update_args[:label] = query_options[:dsLabel] if query_options[:dsLabel]
       update_args[:versionable] = query_options[:versionable] if query_options[:versionable]
-      ds.update(update_args)
+      if ds.respond_to? :update
+        ds.update(update_args)
+      else
+        ds.update_attributes(update_args)
+      end
     end
 
     # {include:RestApiClient::API_DOCUMENTATION}
