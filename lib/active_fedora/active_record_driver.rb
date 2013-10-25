@@ -10,10 +10,86 @@ module ActiveFedora
     extend Deprecation
 
     class Datastream < ActiveRecord::Base
+      after_create :audit
+      before_save :timestamp
+
+      def timestamp
+        self.updated = Time.now.utc.iso8601(3)
+      end
+
+      def audit
+        Audit.create!(pid: pid, component: dsid, action: 'addDatastream')
+      end
+
+      def self.versions_xml(pid, dsid)
+        versions = Datastream.where(pid: pid, dsid: dsid).order('updated')
+        corpus = versions.map { |ds|
+          "<datastreamProfile><dsCreateDate>#{ds.updated}</dsCreateDate></datastreamProfile>"
+        }
+        "<datastreamHistory>#{corpus.join("\n\t")}</datastreamHistory>"
+      end
     end
     class RepoObject < ActiveRecord::Base
+      def mod_date
+        if a = audits.first
+          a.created_at.iso8601(3)
+        else
+          Time.now.iso8601(3)
+        end
+      end
+
+      def to_foxml
+        <<-eos
+        <?xml version="1.0" encoding="UTF-8"?>
+  <foxml:digitalObject VERSION="1.1" PID="changeme:242"
+  xmlns:foxml="info:fedora/fedora-system:def/foxml#"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="info:fedora/fedora-system:def/foxml# http://www.fedora.info/definitions/1/0/foxml1-1.xsd">
+  <foxml:objectProperties>
+  <foxml:property NAME="info:fedora/fedora-system:def/model#state" VALUE="Active"/>
+  <foxml:property NAME="info:fedora/fedora-system:def/model#label" VALUE=""/>
+  <foxml:property NAME="info:fedora/fedora-system:def/model#ownerId" VALUE="fedoraAdmin"/>
+  <foxml:property NAME="info:fedora/fedora-system:def/model#createdDate" VALUE="2013-02-25T16:43:05.802Z"/>
+  <foxml:property NAME="info:fedora/fedora-system:def/view#lastModifiedDate" VALUE="2013-02-25T16:43:06.379Z"/>
+  </foxml:objectProperties>
+  <foxml:datastream ID="AUDIT" STATE="A" CONTROL_GROUP="X" VERSIONABLE="false">
+  <foxml:datastreamVersion ID="AUDIT.0" LABEL="Audit Trail for this object" CREATED="2013-02-25T16:43:05.802Z" MIMETYPE="text/xml" FORMAT_URI="info:fedora/fedora-system:format/xml.fedora.audit">
+  <foxml:xmlContent>
+    <audit:auditTrail xmlns:audit="info:fedora/fedora-system:def/audit#">
+#{audit_log_xml}
+    <audit:auditTrail>
+  </foxml:xmlContent>
+  </foxml:datastreamVersion>
+  </foxml:datastream>
+  </foxml:digitalObject>
+eos
+      end
+
+      def audits
+        Audit.where(pid: pid).order('created_at')
+      end
+
+      def audit_log_xml
+        audits.each_with_index.map { |audit, i| audit.to_xml(i + 1)}.join("\n")
+      end
+
     end
     class Sequence < ActiveRecord::Base
+    end
+    class Audit < ActiveRecord::Base
+      def to_xml(i = id)
+        <<-eos
+        <audit:record ID="AUDREC#{i}">
+        <audit:process type="Fedora API-M"/>
+        <audit:action>#{action}</audit:action>
+        <audit:componentID>#{component}</audit:componentID>
+        <audit:responsibility>fedoraAdmin</audit:responsibility>
+        <audit:date>#{created_at.iso8601(3)}</audit:date>
+        <audit:justification></audit:justification>
+        </audit:record>
+eos
+      end
+      
     end
 
 
@@ -82,7 +158,7 @@ module ActiveFedora
       "<objectProfile>
       <objLabel>#{obj.label}</objLabel>
       <objState>#{obj.state}</objState>
-      <objCreateDate>#{Date.today()}</objCreateDate><objLastModDate>#{Date.today()}</objLastModDate></objectProfile>"
+      <objCreateDate>#{obj.mod_date}</objCreateDate><objLastModDate>#{obj.mod_date}</objLastModDate></objectProfile>"
     end
 
     # {include:RestApiClient::API_DOCUMENTATION}
@@ -166,6 +242,8 @@ module ActiveFedora
       raise ArgumentError, "Must have a pid" unless pid
       raise "not implemented"
       client[object_versions_url(pid, query_options)].get
+      obj = RepoObject.where(pid: pid).first
+      raise RestClient::ResourceNotFound unless obj
     rescue Exception => exception
         rescue_with_handler(exception) || raise
     end
@@ -178,11 +256,7 @@ module ActiveFedora
       query_options = options.dup
       pid = query_options.delete(:pid)
       raise ArgumentError, "Missing required parameter :pid" unless pid
-      query_options[:format] ||= 'xml'
-      raise "not implemented"
-      client[object_xml_url(pid, query_options)].get
-    rescue Exception => exception
-        rescue_with_handler(exception) || raise
+      RepoObject.where(pid: pid).first.to_foxml
     end
 
     # {include:RestApiClient::API_DOCUMENTATION}
@@ -206,7 +280,9 @@ module ActiveFedora
       query_options[:format] ||= 'xml'
       val = nil
 
-      ds = Datastream.where(pid: pid, dsid: dsid).first
+      query_args = {pid: pid, dsid: dsid}
+      query_args[:updated] = query_options[:asOfDateTime] if query_options[:asOfDateTime]
+      ds = Datastream.where(query_args).order('updated desc').first
       raise RestClient::ResourceNotFound unless ds
       "<datastreamProfile>
           <dsSize>#{ds.content ? ds.content.size : 0}</dsSize>
@@ -227,7 +303,7 @@ module ActiveFedora
       raise ArgumentError, "Missing required parameter :pid" unless pid
       query_options[:format] ||= 'xml'
       val = nil
-      content = Datastream.where(pid: pid).map { |ds| "<datastream dsid='#{ds.dsid}'></datastream>" }
+      content = Datastream.where(pid: pid).map { |ds| ds.dsid}.uniq.map { |dsid| "<datastream dsid='#{dsid}'></datastream>" }
       "<objectDatastreams>#{content.join}</objectDatastreams>"
     end
 
@@ -257,13 +333,7 @@ module ActiveFedora
       dsid = query_options.delete(:dsid)
       raise ArgumentError, "Must supply dsid" unless dsid
       query_options[:format] ||= 'xml'
-      raise "not implemented"
-      client[datastream_history_url(pid, dsid, query_options)].get
-    rescue RestClient::ResourceNotFound => e
-      #404 Resource Not Found: No datastream history could be found. There is no datastream history for the digital object "changeme:1" with datastream ID of "descMetadata
-      return nil
-    rescue Exception => exception
-        rescue_with_handler(exception) || raise
+      Datastream.versions_xml(pid, dsid)
     end
 
     alias_method :datastream_history, :datastream_versions
@@ -277,21 +347,9 @@ module ActiveFedora
       query_options = options.dup
       pid = query_options.delete(:pid)
       dsid = query_options.delete(:dsid)
-      # method = query_options.delete(:method)
-      # method ||= :get
-      # raise self.class.name + "#datastream_dissemination requires a DSID" unless dsid
-      # if block_given?
-      #   resource = safe_subresource(datastream_content_url(pid, dsid, query_options), :block_response => block_response)
-      # else
-      #   resource = client[datastream_content_url(pid, dsid, query_options)]
-      # end
-      # val = nil
-      # benchmark "Loaded datastream content #{pid}/#{dsid}", :level=>:debug do
-      # raise "not implemented"
-      #   val = resource.send(method)
-      # end
-      # val
-      ds = Datastream.where(pid: pid, dsid: dsid).first
+      query_args = {pid: pid, dsid: dsid}
+      query_args[:updated] = query_options[:asOfDateTime] if query_options[:asOfDateTime]
+      ds = Datastream.where(query_args).order('updated desc').first
       raise "can't find datastream #{pid}, #{dsid}" unless ds
       ds.content
     end
@@ -306,9 +364,7 @@ module ActiveFedora
       pid = query_options.delete(:pid)
       dsid = query_options.delete(:dsid)
       file = query_options.delete(:content)
-      # In ruby 1.8.7 StringIO (file) responds_to? :path, but it always returns nil,  In ruby 1.9.3 StringIO doesn't have path.
-      # When we discontinue ruby 1.8.7 support we can remove the `|| ''` part.
-      content_type = query_options.delete(:content_type) || query_options[:mimeType] || (MIME::Types.type_for(file.path || '').first if file.respond_to? :path) || 'application/octet-stream'
+      content_type = query_options.delete(:content_type) || query_options[:mimeType] || (MIME::Types.type_for(file.path).first if file.respond_to? :path) || 'application/octet-stream'
       run_hook :before_add_datastream, :pid => pid, :dsid => dsid, :file => file, :options => options
       str = file.respond_to?(:read) ? file.read : file
       file.rewind if file.respond_to?(:rewind)
@@ -329,24 +385,21 @@ module ActiveFedora
       # When we discontinue ruby 1.8.7 support we can remove the `|| ''` part.
       content_type = query_options.delete(:content_type) || query_options.delete(:mimeType) || (MIME::Types.type_for(file.path || '').first if file.respond_to? :path) || 'application/octet-stream'
 
-      rest_client_options = {}
+      run_hook :before_modify_datastream, :pid => pid, :dsid => dsid, :file => file, :content_type => content_type, :options => options
+      update_args = {}
       if file
-        rest_client_options[:multipart] = true
-        rest_client_options[:content_type] = content_type
+        str = file.respond_to?(:read) ? file.read : file
+        file.rewind if file.respond_to?(:rewind)
+        update_args[:content] = str 
+        update_args[:content_type] = content_type
       end
 
-      run_hook :before_modify_datastream, :pid => pid, :dsid => dsid, :file => file, :content_type => content_type, :options => options
-      str = file.respond_to?(:read) ? file.read : file
-      file.rewind if file.respond_to?(:rewind)
-      ds = if dsid == "RELS-EXT"
-        Datastream.where(pid: pid, dsid: dsid).first_or_create
-      else 
-        Datastream.where(pid: pid, dsid: dsid).first
-      end
+      ds = Datastream.where(pid: pid, dsid: dsid).first
       raise "can't find datastream #{pid}, #{dsid}" unless ds
-      optional_args = {}
-      optional_args[:label] = query_options[:dsLabel] if query_options[:dsLabel]
-      ds.update({content_type: content_type, content: file}.merge(optional_args))
+      ds = ds.dup if ds.versionable?
+      update_args[:label] = query_options[:dsLabel] if query_options[:dsLabel]
+      update_args[:versionable] = query_options[:versionable] if query_options[:versionable]
+      ds.update(update_args)
     end
 
     # {include:RestApiClient::API_DOCUMENTATION}
@@ -465,11 +518,12 @@ module ActiveFedora
       t.column :content_type, :string
       t.column :content, :text
       t.column :versionable, :boolean
+      t.column :updated, :string
     end
   end
 
   unless conn.index_name_exists?(:datastreams, 'datastream_by_pid_and_dsid', nil)
-    conn.add_index(:datastreams, [:pid, :dsid], unique: true, name: 'datastream_by_pid_and_dsid')
+    conn.add_index(:datastreams, [:pid, :dsid], name: 'datastream_by_pid_and_dsid')
   end
 
   #conn.drop_table(:repo_objects)
@@ -483,10 +537,23 @@ module ActiveFedora
   unless conn.index_name_exists?(:repo_objects, 'repo_objects_by_pid', nil)
     conn.add_index(:repo_objects, :pid, unique: true, name: 'repo_objects_by_pid')
   end
+
+  unless conn.table_exists?(:audits)
+    conn.create_table(:audits) do |t|
+      t.column :action, :string
+      t.column :pid, :string
+      t.column :component, :string
+      t.column :created_at, :timestamp
+    end
+  end
   #conn.drop_table(:sequences)
   unless conn.table_exists?(:sequences)
     conn.create_table(:sequences) do |t|
       t.column :value, :integer, default: 0
     end
   end
+
+  ActiveFedora::ActiveRecordDriver::Audit.delete_all
+  ActiveFedora::ActiveRecordDriver::Datastream.delete_all
+  ActiveFedora::ActiveRecordDriver::RepoObject.delete_all
 end
